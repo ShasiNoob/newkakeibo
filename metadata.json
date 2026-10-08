@@ -1,0 +1,6 @@
+{
+  "name": "家計簿 - iPhoneウィジェット対応",
+  "description": "Appleライクなデザインのスマート家計簿。自由資金・普通貯金・車維持費のFIFO管理と、iPhoneホーム画面ウィジェット（Scriptable/API）での残高リアルタイム表示に対応。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
