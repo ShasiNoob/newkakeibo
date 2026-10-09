@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Settings as SettingsIcon,
   Save,
@@ -10,6 +10,9 @@ import {
   FileSpreadsheet,
   Check,
   AlertTriangle,
+  ClipboardPaste,
+  FileText,
+  X,
 } from 'lucide-react';
 import { Api, formatYen } from '../api/client.ts';
 import type { Settings, Expense } from '../types.ts';
@@ -21,18 +24,58 @@ interface SettingsViewProps {
   onToast: (msg: string, isError?: boolean) => void;
 }
 
+const DEFAULT_CATEGORIES = [
+  '食費',
+  '交通費',
+  '車',
+  'DJ・音楽',
+  'PC・ゲーム',
+  'ファッション',
+  '趣味',
+  '日用品',
+  '娯楽',
+  'その他',
+];
+
 export const SettingsView: React.FC<SettingsViewProps> = ({
   settings,
   expenses,
   onRefresh,
   onToast,
 }) => {
-  const [savingsDefault, setSavingsDefault] = useState(settings.normalSavingsDefault);
-  const [carDefault, setCarDefault] = useState(settings.carMaintenanceDefault);
-  const [categories, setCategories] = useState<string[]>(settings.categories);
+  const safeCategories = Array.isArray(settings?.categories) && settings.categories.length > 0
+    ? settings.categories
+    : DEFAULT_CATEGORIES;
+
+  const [savingsDefault, setSavingsDefault] = useState(
+    typeof settings?.normalSavingsDefault === 'number' ? settings.normalSavingsDefault : 10000
+  );
+  const [carDefault, setCarDefault] = useState(
+    typeof settings?.carMaintenanceDefault === 'number' ? settings.carMaintenanceDefault : 10000
+  );
+  const [categories, setCategories] = useState<string[]>(safeCategories);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
+
+  // JSON Paste Modal state
+  const [showPasteModal, setShowPasteModal] = useState(false);
+  const [pasteJsonText, setPasteJsonText] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
+
+  useEffect(() => {
+    if (settings) {
+      if (typeof settings.normalSavingsDefault === 'number') {
+        setSavingsDefault(settings.normalSavingsDefault);
+      }
+      if (typeof settings.carMaintenanceDefault === 'number') {
+        setCarDefault(settings.carMaintenanceDefault);
+      }
+      if (Array.isArray(settings.categories) && settings.categories.length > 0) {
+        setCategories(settings.categories);
+      }
+    }
+  }, [settings]);
 
   const handleSaveDefaults = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,28 +140,49 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
-  const handleImportJSON = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportJSONFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = async (event) => {
       try {
-        const json = JSON.parse(event.target?.result as string);
+        const text = event.target?.result as string;
+        const json = JSON.parse(text);
         await Api.importData(json);
-        onToast('データを正常に復元しました');
+        onToast('データを正常に復元しました！');
         onRefresh();
       } catch (err: any) {
-        onToast('JSONデータの読み込みに失敗しました: ' + err.message, true);
+        onToast('JSON読み込み失敗: ' + (err.message || 'フォーマットが無効です'), true);
       }
     };
     reader.readAsText(file);
+  };
+
+  const handlePasteImportSubmit = async () => {
+    if (!pasteJsonText.trim()) {
+      onToast('JSONテキストを入力してください', true);
+      return;
+    }
+    setIsImporting(true);
+    try {
+      const json = JSON.parse(pasteJsonText);
+      await Api.importData(json);
+      onToast('データを正常に復元しました！');
+      setShowPasteModal(false);
+      setPasteJsonText('');
+      onRefresh();
+    } catch (err: any) {
+      onToast('JSON読み込み失敗: ' + (err.message || 'JSON形式を確認してください'), true);
+    } finally {
+      setIsImporting(false);
+    }
   };
 
   const handleExportCSV = () => {
     try {
       const rows = [['日付', '項目名', '金額', 'カテゴリ', 'メモ', '支払い元割り当て']];
       expenses.forEach((e) => {
-        const allocStr = e.allocations
+        const allocStr = (e.allocations || [])
           .map((a) => `${a.sourceMonth}(${a.type}): ${a.amount}`)
           .join(' / ');
         rows.push([e.date, e.name, String(e.amount), e.category, e.memo || '', allocStr]);
@@ -265,10 +329,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       </div>
 
-      {/* Data Backup & Export */}
+      {/* Data Backup & Export / Import */}
       <div className="rounded-3xl bg-[#1D212C] border border-white/10 p-5 shadow-xl space-y-3">
         <h3 className="text-xs font-bold text-gray-300 uppercase tracking-wider">
-          データバックアップ & エクスポート
+          データバックアップ & 復元
         </h3>
 
         <div className="grid grid-cols-2 gap-2">
@@ -291,14 +355,24 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </button>
         </div>
 
-        <div>
+        {/* Import Buttons */}
+        <div className="space-y-2 pt-1">
+          <button
+            type="button"
+            onClick={() => setShowPasteModal(true)}
+            className="w-full flex items-center justify-center space-x-1.5 text-xs bg-[#D4A15C]/20 hover:bg-[#D4A15C]/30 text-[#D4A15C] p-2.5 rounded-xl border border-[#D4A15C]/40 transition font-bold"
+          >
+            <ClipboardPaste className="w-3.5 h-3.5" />
+            <span>JSONテキストを貼り付けて復元</span>
+          </button>
+
           <label className="flex items-center justify-center space-x-1.5 text-xs bg-white/5 hover:bg-white/10 text-gray-300 p-2.5 rounded-xl border border-white/10 cursor-pointer transition">
-            <Upload className="w-3.5 h-3.5 text-[#D4A15C]" />
-            <span>JSONバックアップから復元</span>
+            <Upload className="w-3.5 h-3.5 text-gray-400" />
+            <span>JSONファイルを選択して復元</span>
             <input
               type="file"
               accept=".json"
-              onChange={handleImportJSON}
+              onChange={handleImportJSONFile}
               className="hidden"
             />
           </label>
@@ -342,6 +416,55 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </button>
         )}
       </div>
+
+      {/* Direct JSON Paste Modal */}
+      {showPasteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-lg bg-[#1D212C] border border-white/10 rounded-3xl p-5 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <FileText className="w-4 h-4 text-[#D4A15C]" />
+                <h3 className="text-sm font-bold text-white">JSONテキストを貼り付けて復元</h3>
+              </div>
+              <button
+                onClick={() => setShowPasteModal(false)}
+                className="p-1 rounded-full text-gray-400 hover:text-white bg-white/5"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-300">
+              元の家計簿アプリからエクスポートしたJSONデータをそのまま貼り付けてください。
+            </p>
+
+            <textarea
+              value={pasteJsonText}
+              onChange={(e) => setPasteJsonText(e.target.value)}
+              placeholder='{"version": 1, "incomes": [...], "funds": [...], "expenses": [...]}'
+              className="w-full flex-1 min-h-[220px] bg-[#14171F] text-xs font-mono text-gray-200 p-3 rounded-2xl border border-white/10 focus:outline-none focus:border-[#D4A15C] resize-none"
+            />
+
+            <div className="flex space-x-2 pt-2">
+              <button
+                type="button"
+                onClick={handlePasteImportSubmit}
+                disabled={isImporting}
+                className="flex-1 py-2.5 rounded-xl bg-[#D4A15C] hover:bg-[#c2914c] text-black font-bold text-xs transition disabled:opacity-50"
+              >
+                {isImporting ? 'インポート中...' : 'このJSONでデータを復元する'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowPasteModal(false)}
+                className="py-2.5 px-4 rounded-xl bg-white/10 text-gray-300 text-xs hover:bg-white/15 transition"
+              >
+                キャンセル
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

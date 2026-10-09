@@ -147,6 +147,53 @@ function getInitialDatabase(): DatabaseSchema {
   };
 }
 
+function normalizeSettings(raw: any): Settings {
+  const result: Settings = {
+    normalSavingsDefault: DEFAULT_SETTINGS.normalSavingsDefault,
+    carMaintenanceDefault: DEFAULT_SETTINGS.carMaintenanceDefault,
+    categories: [...DEFAULT_SETTINGS.categories],
+    widgetSecretKey: DEFAULT_SETTINGS.widgetSecretKey,
+  };
+
+  if (!raw) return result;
+
+  if (Array.isArray(raw)) {
+    // Original ShasiNoob/kakeibo export: [{ key: 'categories', value: [...] }, ...]
+    for (const item of raw) {
+      if (item && item.key) {
+        if (item.key === 'normalSavingsDefault' && typeof item.value === 'number') {
+          result.normalSavingsDefault = item.value;
+        } else if (item.key === 'carMaintenanceDefault' && typeof item.value === 'number') {
+          result.carMaintenanceDefault = item.value;
+        } else if (item.key === 'categories' && Array.isArray(item.value) && item.value.length > 0) {
+          result.categories = item.value;
+        } else if (item.key === 'widgetSecretKey') {
+          result.widgetSecretKey = item.value;
+        }
+      }
+    }
+  } else if (typeof raw === 'object') {
+    if (typeof raw.normalSavingsDefault === 'number') {
+      result.normalSavingsDefault = raw.normalSavingsDefault;
+    }
+    if (typeof raw.carMaintenanceDefault === 'number') {
+      result.carMaintenanceDefault = raw.carMaintenanceDefault;
+    }
+    if (Array.isArray(raw.categories) && raw.categories.length > 0) {
+      result.categories = raw.categories;
+    }
+    if (raw.widgetSecretKey) {
+      result.widgetSecretKey = raw.widgetSecretKey;
+    }
+  }
+
+  if (!result.categories || result.categories.length === 0) {
+    result.categories = [...DEFAULT_SETTINGS.categories];
+  }
+
+  return result;
+}
+
 let memoryDb: DatabaseSchema = getInitialDatabase();
 
 function loadDatabase(): DatabaseSchema {
@@ -158,7 +205,13 @@ function loadDatabase(): DatabaseSchema {
       const raw = fs.readFileSync(DB_FILE, 'utf-8');
       const parsed = JSON.parse(raw);
       if (parsed && Array.isArray(parsed.incomes) && Array.isArray(parsed.expenses) && Array.isArray(parsed.funds)) {
-        memoryDb = parsed;
+        memoryDb = {
+          incomes: parsed.incomes,
+          expenses: parsed.expenses,
+          funds: parsed.funds,
+          settings: normalizeSettings(parsed.settings),
+          lastUpdated: parsed.lastUpdated || new Date().toISOString(),
+        };
         return memoryDb;
       }
     }
@@ -829,12 +882,14 @@ app.delete('/api/incomes/:id', (req: Request, res: Response) => {
 // POST /api/expenses - Add expense
 app.post('/api/expenses', (req: Request, res: Response) => {
   const { date, amount, category, name, memo = '', requestedByType } = req.body;
-  if (!date || !amount || !category || !name) {
-    return res.status(400).json({ error: '日付、金額、カテゴリ、項目名は必須です。' });
+  if (!date || amount === undefined || isNaN(Number(amount))) {
+    return res.status(400).json({ error: '日付と金額は必須です。' });
   }
 
   const numAmount = Number(amount);
   const monthStr = date.slice(0, 7);
+  const safeName = (name !== undefined && String(name).trim() !== '') ? String(name).trim() : '支出';
+  const safeCategory = (category !== undefined && String(category).trim() !== '') ? String(category).trim() : 'その他';
 
   // If user requested specific allocations: [{type: 'free', amount: X}, ...]
   let requests: Array<{ type: FundType; amount: number }> = [];
@@ -852,9 +907,9 @@ app.post('/api/expenses', (req: Request, res: Response) => {
     date,
     month: monthStr,
     amount: numAmount,
-    category,
-    name: name.trim(),
-    memo: memo.trim(),
+    category: safeCategory,
+    name: safeName,
+    memo: String(memo || '').trim(),
     allocations,
     createdAt: new Date().toISOString(),
   };
@@ -893,6 +948,7 @@ app.put('/api/settings', (req: Request, res: Response) => {
   if (Array.isArray(categories)) memoryDb.settings.categories = categories;
   if (widgetSecretKey !== undefined) memoryDb.settings.widgetSecretKey = widgetSecretKey;
 
+  memoryDb.settings = normalizeSettings(memoryDb.settings);
   saveDatabase(memoryDb);
   res.json({ settings: memoryDb.settings });
 });
@@ -924,21 +980,29 @@ app.get('/api/export', (req: Request, res: Response) => {
 
 // POST /api/import - Restore backup
 app.post('/api/import', (req: Request, res: Response) => {
-  const data = req.body;
+  let data = req.body;
+  if (typeof data === 'string') {
+    try {
+      data = JSON.parse(data);
+    } catch {
+      return res.status(400).json({ error: 'JSONの解析に失敗しました。正しいJSON形式を入力してください。' });
+    }
+  }
+
   if (!data || !Array.isArray(data.incomes) || !Array.isArray(data.expenses) || !Array.isArray(data.funds)) {
-    return res.status(400).json({ error: 'バックアップデータの形式が正しくありません。' });
+    return res.status(400).json({ error: 'バックアップデータの形式が正しくありません。(incomes, expenses, funds配列が必要です)' });
   }
 
   memoryDb = {
     incomes: data.incomes,
     expenses: data.expenses,
     funds: data.funds,
-    settings: data.settings || { ...DEFAULT_SETTINGS },
+    settings: normalizeSettings(data.settings),
     lastUpdated: new Date().toISOString(),
   };
 
   saveDatabase(memoryDb);
-  res.json({ ok: true, message: 'データを復元しました。' });
+  res.json({ ok: true, message: 'データを正常に復元しました。', fundTotals: getFundTotals(memoryDb.funds) });
 });
 
 // Vite middleware or static serving

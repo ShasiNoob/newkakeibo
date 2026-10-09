@@ -20,8 +20,10 @@ export const IncomeModal: React.FC<IncomeModalProps> = ({
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [amount, setAmount] = useState<string>('');
-  const [savingsAmount, setSavingsAmount] = useState<number>(settings.normalSavingsDefault);
-  const [carAmount, setCarAmount] = useState<number>(settings.carMaintenanceDefault);
+  const defaultSavings = typeof settings?.normalSavingsDefault === 'number' ? settings.normalSavingsDefault : 10000;
+  const defaultCar = typeof settings?.carMaintenanceDefault === 'number' ? settings.carMaintenanceDefault : 10000;
+  const [savingsAmount, setSavingsAmount] = useState<number>(defaultSavings);
+  const [carAmount, setCarAmount] = useState<number>(defaultCar);
   const [memo, setMemo] = useState<string>('');
   const [loading, setLoading] = useState(false);
 

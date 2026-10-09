@@ -11,6 +11,19 @@ interface ExpenseModalProps {
   onToast: (msg: string, isError?: boolean) => void;
 }
 
+const DEFAULT_CATEGORIES = [
+  '食費',
+  '交通費',
+  '車',
+  'DJ・音楽',
+  'PC・ゲーム',
+  'ファッション',
+  '趣味',
+  '日用品',
+  '娯楽',
+  'その他',
+];
+
 export const ExpenseModal: React.FC<ExpenseModalProps> = ({
   settings,
   totals,
@@ -18,10 +31,14 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
   onSuccess,
   onToast,
 }) => {
+  const categoriesList = Array.isArray(settings?.categories) && settings.categories.length > 0
+    ? settings.categories
+    : DEFAULT_CATEGORIES;
+
   const [date, setDate] = useState(todayISO());
   const [name, setName] = useState('');
   const [amount, setAmount] = useState<string>('');
-  const [category, setCategory] = useState<string>(settings.categories[0] || '食費');
+  const [category, setCategory] = useState<string>(categoriesList[0] || '食費');
   const [memo, setMemo] = useState('');
   const [showAdvancedAllocation, setShowAdvancedAllocation] = useState(false);
 
@@ -36,14 +53,12 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) {
-      onToast('項目名を入力してください', true);
-      return;
-    }
     if (!numAmount || numAmount <= 0) {
       onToast('有効な金額を入力してください', true);
       return;
     }
+
+    const safeName = name.trim() || '支出';
 
     let requestedByType: Array<{ type: FundType; amount: number }> | undefined = undefined;
 
@@ -72,9 +87,9 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
     try {
       const result = await Api.addExpense({
         date,
-        name: name.trim(),
+        name: safeName,
         amount: numAmount,
-        category,
+        category: category || 'その他',
         memo: memo.trim(),
         requestedByType,
       });
@@ -135,7 +150,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
                 onChange={(e) => setCategory(e.target.value)}
                 className="w-full bg-[#14171F] text-xs text-white rounded-xl px-2.5 py-2 border border-white/10 focus:outline-none focus:border-[#D4A15C]"
               >
-                {settings.categories.map((c) => (
+                {categoriesList.map((c) => (
                   <option key={c} value={c}>
                     {c}
                   </option>
@@ -146,13 +161,12 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
 
           {/* Item Name */}
           <div>
-            <label className="text-[11px] text-gray-400 block mb-1">項目名</label>
+            <label className="text-[11px] text-gray-400 block mb-1">項目名 (任意)</label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="例：スーパー買い物、ガソリン代、書籍など"
-              required
               className="w-full bg-[#14171F] text-xs text-white rounded-xl px-3 py-2 border border-white/10 focus:outline-none focus:border-[#D4A15C]"
             />
           </div>
