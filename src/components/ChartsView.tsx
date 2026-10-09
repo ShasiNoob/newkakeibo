@@ -28,8 +28,12 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ incomes, expenses, total
   // Extract unique years
   const years = useMemo(() => {
     const set = new Set<string>();
-    incomes.forEach((i) => set.add(i.date.slice(0, 4)));
-    expenses.forEach((e) => set.add(e.date.slice(0, 4)));
+    incomes.forEach((i) => {
+      if (i && i.date) set.add(i.date.slice(0, 4));
+    });
+    expenses.forEach((e) => {
+      if (e && e.date) set.add(e.date.slice(0, 4));
+    });
     if (!set.has(String(new Date().getFullYear()))) {
       set.add(String(new Date().getFullYear()));
     }
@@ -38,13 +42,15 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ incomes, expenses, total
 
   // Category breakdown for selected year
   const categoryStats = useMemo(() => {
-    const filtered = expenses.filter((e) => e.date.startsWith(selectedYear));
+    const filtered = expenses.filter((e) => e && e.date && e.date.startsWith(selectedYear));
     const map: Record<string, number> = {};
     let total = 0;
 
     filtered.forEach((e) => {
-      map[e.category] = (map[e.category] || 0) + e.amount;
-      total += e.amount;
+      const cat = e.category || 'その他';
+      const amt = Number(e.amount) || 0;
+      map[cat] = (map[cat] || 0) + amt;
+      total += amt;
     });
 
     const entries = Object.entries(map)

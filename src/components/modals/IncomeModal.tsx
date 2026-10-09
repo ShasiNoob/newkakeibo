@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, ArrowUpCircle } from 'lucide-react';
 import { Api, formatYen } from '../../api/client.ts';
+import { cleanNum } from '../../db/clientStore.ts';
 import type { Settings } from '../../types.ts';
 
 interface IncomeModalProps {
@@ -22,13 +23,15 @@ export const IncomeModal: React.FC<IncomeModalProps> = ({
   const [amount, setAmount] = useState<string>('');
   const defaultSavings = typeof settings?.normalSavingsDefault === 'number' ? settings.normalSavingsDefault : 10000;
   const defaultCar = typeof settings?.carMaintenanceDefault === 'number' ? settings.carMaintenanceDefault : 10000;
-  const [savingsAmount, setSavingsAmount] = useState<number>(defaultSavings);
-  const [carAmount, setCarAmount] = useState<number>(defaultCar);
+  const [savingsAmount, setSavingsAmount] = useState<string>(String(defaultSavings));
+  const [carAmount, setCarAmount] = useState<string>(String(defaultCar));
   const [memo, setMemo] = useState<string>('');
   const [loading, setLoading] = useState(false);
 
-  const numAmount = Number(amount) || 0;
-  const freeAmount = numAmount - savingsAmount - carAmount;
+  const numAmount = cleanNum(amount);
+  const numSavings = cleanNum(savingsAmount);
+  const numCar = cleanNum(carAmount);
+  const freeAmount = numAmount - numSavings - numCar;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,8 +46,8 @@ export const IncomeModal: React.FC<IncomeModalProps> = ({
         year,
         month,
         amount: numAmount,
-        normalSavingsAmount: savingsAmount,
-        carMaintenanceAmount: carAmount,
+        normalSavingsAmount: numSavings,
+        carMaintenanceAmount: numCar,
         memo,
       });
       onToast('収入を登録しました');
@@ -132,7 +135,7 @@ export const IncomeModal: React.FC<IncomeModalProps> = ({
                 <input
                   type="number"
                   value={savingsAmount}
-                  onChange={(e) => setSavingsAmount(Number(e.target.value))}
+                  onChange={(e) => setSavingsAmount(e.target.value)}
                   min="0"
                   step="1000"
                   className="w-full bg-[#14171F] text-xs font-mono text-white rounded-xl px-2.5 py-1.5 border border-white/10 focus:outline-none focus:border-emerald-400"
@@ -144,7 +147,7 @@ export const IncomeModal: React.FC<IncomeModalProps> = ({
                 <input
                   type="number"
                   value={carAmount}
-                  onChange={(e) => setCarAmount(Number(e.target.value))}
+                  onChange={(e) => setCarAmount(e.target.value)}
                   min="0"
                   step="1000"
                   className="w-full bg-[#14171F] text-xs font-mono text-white rounded-xl px-2.5 py-1.5 border border-white/10 focus:outline-none focus:border-sky-400"
@@ -173,12 +176,13 @@ export const IncomeModal: React.FC<IncomeModalProps> = ({
             />
           </div>
 
+          {/* Submit */}
           <button
             type="submit"
-            disabled={loading}
-            className="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-black font-bold text-xs shadow-md transition disabled:opacity-50"
+            disabled={loading || !numAmount}
+            className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 active:scale-[0.98] text-white font-bold rounded-xl text-xs transition disabled:opacity-50 flex items-center justify-center space-x-1 shadow-lg shadow-emerald-500/20"
           >
-            {loading ? '登録中...' : '収入を確定してプールに追加'}
+            <span>{loading ? '登録中…' : '収入を登録して資金に配分'}</span>
           </button>
         </form>
       </div>

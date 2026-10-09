@@ -17,9 +17,9 @@ export const FundsView: React.FC<FundsViewProps> = ({ funds, totals }) => {
     { type: 'car', label: '車維持費', icon: <Car className="w-4 h-4 text-sky-400" />, total: totals.car },
   ];
 
-  const currentFunds = funds
-    .filter((f) => f.type === activeType)
-    .sort((a, b) => (a.sourceMonth < b.sourceMonth ? 1 : -1));
+  const currentFunds = (funds || [])
+    .filter((f) => f && f.type === activeType)
+    .sort((a, b) => (String(a.sourceMonth) < String(b.sourceMonth) ? 1 : -1));
 
   return (
     <div className="space-y-6">

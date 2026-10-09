@@ -15,6 +15,13 @@ export default function handler(req: any, res: any) {
 
   const displayVal = useComma ? queryAmount.toLocaleString('ja-JP') : String(Math.round(queryAmount));
 
+  const now = new Date();
+  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const daysLeft = Math.max(1, lastDay - now.getDate() + 1);
+  const dailyBudget = Math.max(0, Math.floor(queryAmount / daysLeft));
+  const dailyBudgetStr = `目安: ¥${dailyBudget.toLocaleString('ja-JP')}/日`;
+  const daysLeftStr = `(残${daysLeft}日)`;
+
   if (format === 'svg') {
     res.setHeader('Content-Type', 'image/svg+xml');
 
@@ -80,8 +87,8 @@ export default function handler(req: any, res: any) {
     <text x="140" y="92" text-anchor="end" font-family="'Impact', 'Arial Black', sans-serif" font-weight="900" font-style="italic" font-size="${unitFontSize}" fill="url(#goldGradSm)">円</text>
   </g>
 
-  <text x="80" y="132" text-anchor="middle" font-family="-apple-system, sans-serif" font-weight="700" font-size="10" fill="#E2E8F0">目安: ¥8,520/日</text>
-  <text x="80" y="145" text-anchor="middle" font-family="-apple-system, sans-serif" font-weight="500" font-size="8.5" fill="rgba(255,255,255,0.6)">(残23日)</text>
+  <text x="80" y="132" text-anchor="middle" font-family="-apple-system, sans-serif" font-weight="700" font-size="10" fill="#E2E8F0">${dailyBudgetStr}</text>
+  <text x="80" y="145" text-anchor="middle" font-family="-apple-system, sans-serif" font-weight="500" font-size="8.5" fill="rgba(255,255,255,0.6)">${daysLeftStr}</text>
 </svg>`;
       return res.status(200).send(smallSvg);
     }
@@ -162,9 +169,9 @@ export default function handler(req: any, res: any) {
     totalAssets: queryAmount + 110000 + 40000,
     formattedTotalAssets: `¥${(queryAmount + 150000).toLocaleString('ja-JP')}`,
     monthLabel: '今月',
-    daysLeftInMonth: 23,
-    dailyBudget: Math.round(queryAmount / 23),
-    formattedDailyBudget: `¥${Math.round(queryAmount / 23).toLocaleString('ja-JP')}`,
+    daysLeftInMonth: daysLeft,
+    dailyBudget,
+    formattedDailyBudget: `¥${dailyBudget.toLocaleString('ja-JP')}`,
     healthStatus: 'healthy',
     healthLabel: '順調',
     updatedAt: new Date().toISOString(),

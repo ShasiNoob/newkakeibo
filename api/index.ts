@@ -1,0 +1,94 @@
+// Vercel Serverless Function for all /api routes
+export default function handler(req: any, res: any) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  const url = req.url || '';
+
+  // Default state for Vercel serverless preview
+  const defaultSummary = {
+    currentMonth: '2026-10',
+    fundTotals: { free: 195964, savings: 110000, car: 40000, total: 345964 },
+    incomes: [
+      { id: "id_mtgwtmyy_zkjr1ym", date: "2025-10-01", month: "2025-10", amount: 11034, normalSavingsAmount: 0, carMaintenanceAmount: 0, freeAmount: 11034, memo: "" },
+      { id: "id_mtgwula2_ond0brm", date: "2025-11-01", month: "2025-11", amount: 41684, normalSavingsAmount: 10000, carMaintenanceAmount: 10000, freeAmount: 21684, memo: "" },
+      { id: "id_mtgwv3by_a1etxtw", date: "2025-12-01", month: "2025-12", amount: 42910, normalSavingsAmount: 10000, carMaintenanceAmount: 10000, freeAmount: 22910, memo: "" },
+      { id: "id_mtgwve5d_mb1w9t0", date: "2026-01-01", month: "2026-01", amount: 55170, normalSavingsAmount: 10000, carMaintenanceAmount: 10000, freeAmount: 35170, memo: "" },
+      { id: "id_mtgwvloy_n8ld5mw", date: "2026-02-01", month: "2026-02", amount: 55170, normalSavingsAmount: 10000, carMaintenanceAmount: 10000, freeAmount: 35170, memo: "" },
+      { id: "id_mtgwvwt3_jul6dcm", date: "2026-03-01", month: "2026-03", amount: 53944, normalSavingsAmount: 10000, carMaintenanceAmount: 10000, freeAmount: 33944, memo: "" },
+      { id: "id_mtgww53q_pzfdlrs", date: "2026-04-01", month: "2026-04", amount: 53944, normalSavingsAmount: 10000, carMaintenanceAmount: 10000, freeAmount: 33944, memo: "" },
+      { id: "id_mtgwwe8t_uniux6g", date: "2026-05-01", month: "2026-05", amount: 42910, normalSavingsAmount: 10000, carMaintenanceAmount: 10000, freeAmount: 22910, memo: "" },
+      { id: "id_mtgwwlwn_74psaey", date: "2026-06-01", month: "2026-06", amount: 55170, normalSavingsAmount: 10000, carMaintenanceAmount: 10000, freeAmount: 35170, memo: "" },
+      { id: "id_mtgwwvaf_jnj4nsa", date: "2026-07-01", month: "2026-07", amount: 42910, normalSavingsAmount: 10000, carMaintenanceAmount: 10000, freeAmount: 22910, memo: "" },
+      { id: "id_mtgwx4le_am4jzze", date: "2026-08-01", month: "2026-08", amount: 49040, normalSavingsAmount: 10000, carMaintenanceAmount: 10000, freeAmount: 29040, memo: "" },
+      { id: "id_mtgwxddt_eqo6j48", date: "2026-09-01", month: "2026-09", amount: 61300, normalSavingsAmount: 10000, carMaintenanceAmount: 10000, freeAmount: 41300, memo: "" }
+    ],
+    funds: [
+      { id: "id_mtgwtmz0_dk07pss", type: "free", sourceMonth: "2025-10", originalAmount: 11034, remainingAmount: 0, incomeId: "id_mtgwtmyy_zkjr1ym" },
+      { id: "id_mtgwula5_5v4our3", type: "car", sourceMonth: "2025-11", originalAmount: 10000, remainingAmount: 0, incomeId: "id_mtgwula2_ond0brm" },
+      { id: "id_mtgwula5_mvgd3bf", type: "savings", sourceMonth: "2025-11", originalAmount: 10000, remainingAmount: 10000, incomeId: "id_mtgwula2_ond0brm" },
+      { id: "id_mtgwula5_nij8ne5", type: "free", sourceMonth: "2025-11", originalAmount: 21684, remainingAmount: 0, incomeId: "id_mtgwula2_ond0brm" },
+      { id: "id_mtgwv3c0_fqntfk4", type: "car", sourceMonth: "2025-12", originalAmount: 10000, remainingAmount: 0, incomeId: "id_mtgwv3by_a1etxtw" },
+      { id: "id_mtgwv3c0_xvq3d48", type: "free", sourceMonth: "2025-12", originalAmount: 22910, remainingAmount: 0, incomeId: "id_mtgwv3by_a1etxtw" },
+      { id: "id_mtgwv3c0_ya1mq0o", type: "savings", sourceMonth: "2025-12", originalAmount: 10000, remainingAmount: 10000, incomeId: "id_mtgwv3by_a1etxtw" },
+      { id: "id_mtgwve5e_5cjfgqp", type: "car", sourceMonth: "2026-01", originalAmount: 10000, remainingAmount: 0, incomeId: "id_mtgwve5d_mb1w9t0" },
+      { id: "id_mtgwve5e_wow6fvf", type: "savings", sourceMonth: "2026-01", originalAmount: 10000, remainingAmount: 10000, incomeId: "id_mtgwve5d_mb1w9t0" },
+      { id: "id_mtgwve5e_x7d6ccy", type: "free", sourceMonth: "2026-01", originalAmount: 35170, remainingAmount: 0, incomeId: "id_mtgwve5d_mb1w9t0" },
+      { id: "id_mtgwvloy_94cdk3w", type: "car", sourceMonth: "2026-02", originalAmount: 10000, remainingAmount: 0, incomeId: "id_mtgwvloy_n8ld5mw" },
+      { id: "id_mtgwvloy_fzqdp5f", type: "savings", sourceMonth: "2026-02", originalAmount: 10000, remainingAmount: 10000, incomeId: "id_mtgwvloy_n8ld5mw" },
+      { id: "id_mtgwvloy_mtp7sbd", type: "free", sourceMonth: "2026-02", originalAmount: 35170, remainingAmount: 0, incomeId: "id_mtgwvloy_n8ld5mw" },
+      { id: "id_mtgwvwt4_483v33x", type: "car", sourceMonth: "2026-03", originalAmount: 10000, remainingAmount: 0, incomeId: "id_mtgwvwt3_jul6dcm" },
+      { id: "id_mtgwvwt4_d4yrtov", type: "savings", sourceMonth: "2026-03", originalAmount: 10000, remainingAmount: 10000, incomeId: "id_mtgwvwt3_jul6dcm" },
+      { id: "id_mtgwvwt4_lonn3ot", type: "free", sourceMonth: "2026-03", originalAmount: 33944, remainingAmount: 10690, incomeId: "id_mtgwvwt3_jul6dcm" },
+      { id: "id_mtgww53t_086p5kj", type: "free", sourceMonth: "2026-04", originalAmount: 33944, remainingAmount: 33944, incomeId: "id_mtgww53q_pzfdlrs" },
+      { id: "id_mtgww53t_39e8bh6", type: "savings", sourceMonth: "2026-04", originalAmount: 10000, remainingAmount: 10000, incomeId: "id_mtgww53q_pzfdlrs" },
+      { id: "id_mtgww53t_kd1f826", type: "car", sourceMonth: "2026-04", originalAmount: 10000, remainingAmount: 0, incomeId: "id_mtgww53q_pzfdlrs" },
+      { id: "id_mtgwwe8u_euj0hnk", type: "car", sourceMonth: "2026-05", originalAmount: 10000, remainingAmount: 0, incomeId: "id_mtgwwe8t_uniux6g" },
+      { id: "id_mtgwwe8u_ghjl2ry", type: "free", sourceMonth: "2026-05", originalAmount: 22910, remainingAmount: 22910, incomeId: "id_mtgwwe8t_uniux6g" },
+      { id: "id_mtgwwe8u_nzf8bya", type: "savings", sourceMonth: "2026-05", originalAmount: 10000, remainingAmount: 10000, incomeId: "id_mtgwwe8t_uniux6g" },
+      { id: "id_mtgwwlwo_croh9s9", type: "free", sourceMonth: "2026-06", originalAmount: 35170, remainingAmount: 35170, incomeId: "id_mtgwwlwn_74psaey" },
+      { id: "id_mtgwwlwo_d7qq2db", type: "savings", sourceMonth: "2026-06", originalAmount: 10000, remainingAmount: 10000, incomeId: "id_mtgwwlwn_74psaey" },
+      { id: "id_mtgwwlwo_gcjmevz", type: "car", sourceMonth: "2026-06", originalAmount: 10000, remainingAmount: 10000, incomeId: "id_mtgwwlwn_74psaey" },
+      { id: "id_mtgwwvaf_gv9441j", type: "savings", sourceMonth: "2026-07", originalAmount: 10000, remainingAmount: 10000, incomeId: "id_mtgwwvaf_jnj4nsa" },
+      { id: "id_mtgwwvaf_jp05gc6", type: "free", sourceMonth: "2026-07", originalAmount: 22910, remainingAmount: 22910, incomeId: "id_mtgwwvaf_jnj4nsa" },
+      { id: "id_mtgwwvaf_ne8v282", type: "car", sourceMonth: "2026-07", originalAmount: 10000, remainingAmount: 10000, incomeId: "id_mtgwwvaf_jnj4nsa" },
+      { id: "id_mtgwx4lf_0oqksb0", type: "free", sourceMonth: "2026-08", originalAmount: 29040, remainingAmount: 29040, incomeId: "id_mtgwx4le_am4jzze" },
+      { id: "id_mtgwx4lf_sx8ikd4", type: "car", sourceMonth: "2026-08", originalAmount: 10000, remainingAmount: 10000, incomeId: "id_mtgwx4le_am4jzze" },
+      { id: "id_mtgwx4lf_xcc6g2q", type: "savings", sourceMonth: "2026-08", originalAmount: 10000, remainingAmount: 10000, incomeId: "id_mtgwx4le_am4jzze" },
+      { id: "id_mtgwxddu_0ch3p37", type: "car", sourceMonth: "2026-09", originalAmount: 10000, remainingAmount: 10000, incomeId: "id_mtgwxddt_eqo6j48" },
+      { id: "id_mtgwxddu_1gpdtca", type: "free", sourceMonth: "2026-09", originalAmount: 41300, remainingAmount: 41300, incomeId: "id_mtgwxddt_eqo6j48" },
+      { id: "id_mtgwxddu_ioh0213", type: "savings", sourceMonth: "2026-09", originalAmount: 10000, remainingAmount: 10000, incomeId: "id_mtgwxddt_eqo6j48" }
+    ],
+    expenses: [
+      { id: "id_mtgxrz1c_l8bhgru", date: "2026-03-24", month: "2026-03", amount: 5000, category: "車", name: "カスタム", memo: "", allocations: [{ fundId: "id_mtgwtmz0_dk07pss", sourceMonth: "2025-10", type: "free", amount: 5000 }] },
+      { id: "id_mtgxsosc_f187fez", date: "2026-03-09", month: "2026-03", amount: 10000, category: "PC・ゲーム", name: "VRCHATアバター", memo: "", allocations: [{ fundId: "id_mtgwtmz0_dk07pss", sourceMonth: "2025-10", type: "free", amount: 6034 }, { fundId: "id_mtgwula5_nij8ne5", sourceMonth: "2025-11", type: "free", amount: 3966 }] },
+      { id: "id_mtgxte9t_iu57oni", date: "2026-04-20", month: "2026-04", amount: 9000, category: "DJ・音楽", name: "エフェクター", memo: "", allocations: [{ fundId: "id_mtgwula5_nij8ne5", sourceMonth: "2025-11", type: "free", amount: 9000 }] },
+      { id: "id_mtgxu1bb_ltzul41", date: "2026-05-22", month: "2026-05", amount: 5000, category: "趣味", name: "　", memo: "", allocations: [{ fundId: "id_mtgwula5_nij8ne5", sourceMonth: "2025-11", type: "free", amount: 5000 }] },
+      { id: "id_mtgxvtpq_zih5jxp", date: "2025-12-24", month: "2025-12", amount: 17500, category: "車", name: "エアロ", memo: "", allocations: [{ fundId: "id_mtgwula5_nij8ne5", sourceMonth: "2025-11", type: "free", amount: 3718 }, { fundId: "id_mtgwv3c0_xvq3d48", sourceMonth: "2025-12", type: "free", amount: 13782 }] },
+      { id: "id_mtgxwnnf_z7fu36a", date: "2025-12-08", month: "2025-12", amount: 38000, category: "車", name: "ステアリング", memo: "", allocations: [{ fundId: "id_mtgwv3c0_xvq3d48", sourceMonth: "2025-12", type: "free", amount: 9128 }, { fundId: "id_mtgwve5e_x7d6ccy", sourceMonth: "2026-01", type: "free", amount: 28872 }] },
+      { id: "id_mtgxxlb2_5dxie7c", date: "2026-08-28", month: "2026-08", amount: 20222, category: "DJ・音楽", name: "DDJ-RB", memo: "", allocations: [{ fundId: "id_mtgwve5e_x7d6ccy", sourceMonth: "2026-01", type: "free", amount: 6298 }, { fundId: "id_mtgwvloy_mtp7sbd", sourceMonth: "2026-02", type: "free", amount: 13924 }] },
+      { id: "id_mtgxy0n6_8b8umns", date: "2026-08-26", month: "2026-08", amount: 11000, category: "車", name: "ジャッキウマ", memo: "", allocations: [{ fundId: "id_mtgwvloy_mtp7sbd", sourceMonth: "2026-02", type: "free", amount: 11000 }] },
+      { id: "id_mtgxyf21_fl1anvp", date: "2026-08-25", month: "2026-08", amount: 33500, category: "車", name: "ホイールタイヤ", memo: "", allocations: [{ fundId: "id_mtgwvloy_mtp7sbd", sourceMonth: "2026-02", type: "free", amount: 10246 }, { fundId: "id_mtgwvwt4_lonn3ot", sourceMonth: "2026-03", type: "free", amount: 23254 }] },
+      { id: "id_mtgy6cfi_0np0hnr", date: "2026-07-10", month: "2026-07", amount: 70000, category: "車", name: "車検", memo: "", allocations: [{ fundId: "id_mtgwula5_5v4our3", sourceMonth: "2025-11", type: "car", amount: 10000 }, { fundId: "id_mtgwv3c0_fqntfk4", sourceMonth: "2025-12", type: "car", amount: 10000 }, { fundId: "id_mtgwve5e_5cjfgqp", sourceMonth: "2026-01", type: "car", amount: 10000 }, { fundId: "id_mtgwvloy_94cdk3w", sourceMonth: "2026-02", type: "car", amount: 10000 }, { fundId: "id_mtgwvwt4_483v33x", sourceMonth: "2026-03", type: "car", amount: 10000 }, { fundId: "id_mtgww53t_kd1f826", sourceMonth: "2026-04", type: "car", amount: 10000 }, { fundId: "id_mtgwwe8u_euj0hnk", sourceMonth: "2026-05", type: "car", amount: 10000 }] }
+    ],
+    settings: {
+      normalSavingsDefault: 10000,
+      carMaintenanceDefault: 10000,
+      categories: ['食費', '交通費', '車', 'DJ・音楽', 'PC・ゲーム', 'ファッション', '趣味', '日用品', '娯楽', 'その他'],
+      widgetSecretKey: 'kakeibo_widget_key_default',
+    },
+    lastUpdated: new Date().toISOString(),
+  };
+
+  if (url.includes('/api/summary')) {
+    return res.status(200).json(defaultSummary);
+  }
+
+  // Generic success for data modification endpoints on Vercel
+  return res.status(200).json({ ok: true, status: 'success' });
+}

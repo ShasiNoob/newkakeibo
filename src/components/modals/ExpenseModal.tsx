@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, ArrowDownCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { Api, todayISO, formatYen } from '../../api/client.ts';
+import { cleanNum } from '../../db/clientStore.ts';
 import type { Settings, FundTotals, FundType } from '../../types.ts';
 
 interface ExpenseModalProps {
@@ -49,7 +50,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
 
   const [loading, setLoading] = useState(false);
 
-  const numAmount = Number(amount) || 0;
+  const numAmount = cleanNum(amount);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,9 +64,9 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
     let requestedByType: Array<{ type: FundType; amount: number }> | undefined = undefined;
 
     if (showAdvancedAllocation) {
-      const freePart = Number(allocFree) || 0;
-      const savPart = Number(allocSavings) || 0;
-      const carPart = Number(allocCar) || 0;
+      const freePart = cleanNum(allocFree);
+      const savPart = cleanNum(allocSavings);
+      const carPart = cleanNum(allocCar);
 
       if (freePart + savPart + carPart > 0) {
         if (freePart + savPart + carPart !== numAmount) {

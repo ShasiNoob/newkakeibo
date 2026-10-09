@@ -38,8 +38,12 @@ export const TransactionList: React.FC<TransactionListProps> = ({
   // Compute unique months
   const months = useMemo(() => {
     const set = new Set<string>();
-    incomes.forEach((i) => set.add(i.month));
-    expenses.forEach((e) => set.add(e.month));
+    incomes.forEach((i) => {
+      if (i && i.month) set.add(i.month);
+    });
+    expenses.forEach((e) => {
+      if (e && e.month) set.add(e.month);
+    });
     return Array.from(set).sort().reverse();
   }, [incomes, expenses]);
 
@@ -48,16 +52,20 @@ export const TransactionList: React.FC<TransactionListProps> = ({
     const list: CombinedItem[] = [];
 
     if (filterType === 'all' || filterType === 'income') {
-      incomes.forEach((inc) => list.push({ type: 'income', data: inc, date: inc.date }));
+      incomes.forEach((inc) => {
+        if (inc) list.push({ type: 'income', data: inc, date: inc.date || '' });
+      });
     }
     if (filterType === 'all' || filterType === 'expense') {
-      expenses.forEach((exp) => list.push({ type: 'expense', data: exp, date: exp.date }));
+      expenses.forEach((exp) => {
+        if (exp) list.push({ type: 'expense', data: exp, date: exp.date || '' });
+      });
     }
 
     return list
       .filter((item) => {
         if (selectedMonth !== 'all') {
-          const itemMonth = item.date.slice(0, 7);
+          const itemMonth = item.date ? item.date.slice(0, 7) : '';
           if (itemMonth !== selectedMonth) return false;
         }
 
@@ -67,8 +75,8 @@ export const TransactionList: React.FC<TransactionListProps> = ({
         if (item.type === 'expense') {
           const e = item.data;
           return (
-            e.name.toLowerCase().includes(query) ||
-            e.category.toLowerCase().includes(query) ||
+            (e.name || '').toLowerCase().includes(query) ||
+            (e.category || '').toLowerCase().includes(query) ||
             (e.memo && e.memo.toLowerCase().includes(query))
           );
         } else {

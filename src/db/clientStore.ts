@@ -6,29 +6,69 @@ import type {
   Expense,
   Settings,
   FundTotals,
-  WidgetPayload,
 } from '../types.ts';
 
 const STORAGE_KEY = 'kakeibo_data_v1';
 
-function uid(prefix = 'id'): string {
+export function uid(prefix = 'id'): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
+
+export const DEFAULT_CATEGORIES = [
+  '食費',
+  '交通費',
+  '車',
+  'DJ・音楽',
+  'PC・ゲーム',
+  'ファッション',
+  '趣味',
+  '日用品',
+  '娯楽',
+  'その他',
+];
 
 export const DEFAULT_SETTINGS: Settings = {
   normalSavingsDefault: 10000,
   carMaintenanceDefault: 10000,
-  categories: ['食費', '交通費', '車', 'DJ・音楽', 'PC・ゲーム', 'ファッション', '趣味', '日用品', '娯楽', 'その他'],
+  categories: [...DEFAULT_CATEGORIES],
   widgetSecretKey: 'kakeibo_widget_key_default',
 };
 
-export function normalizeSettings(raw: any): Settings {
+export function cleanNum(v: any, fallback = 0): number {
+  if (v === null || v === undefined) return fallback;
+  const n = typeof v === 'number' ? v : Number(String(v).replace(/,/g, '').trim());
+  return isNaN(n) ? fallback : Math.round(n);
+}
+
+export function normalizeCategories(raw: any): string[] {
+  if (!raw) return [...DEFAULT_CATEGORIES];
+  const result: string[] = [];
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      if (typeof item === 'string' && item.trim()) {
+        result.push(item.trim());
+      } else if (item && typeof item === 'object') {
+        const name = item.name || item.value || item.category;
+        if (typeof name === 'string' && name.trim()) {
+          result.push(name.trim());
+        }
+      }
+    }
+  }
+  return result.length > 0 ? Array.from(new Set(result)) : [...DEFAULT_CATEGORIES];
+}
+
+export function normalizeSettings(raw: any, explicitCategories?: any): Settings {
   const result: Settings = {
     normalSavingsDefault: DEFAULT_SETTINGS.normalSavingsDefault,
     carMaintenanceDefault: DEFAULT_SETTINGS.carMaintenanceDefault,
-    categories: [...DEFAULT_SETTINGS.categories],
+    categories: [...DEFAULT_CATEGORIES],
     widgetSecretKey: DEFAULT_SETTINGS.widgetSecretKey,
   };
+
+  if (explicitCategories) {
+    result.categories = normalizeCategories(explicitCategories);
+  }
 
   if (!raw) return result;
 
@@ -36,34 +76,34 @@ export function normalizeSettings(raw: any): Settings {
     // Original ShasiNoob/kakeibo export: [{ key: 'categories', value: [...] }, ...]
     for (const item of raw) {
       if (item && item.key) {
-        if (item.key === 'normalSavingsDefault' && typeof item.value === 'number') {
-          result.normalSavingsDefault = item.value;
-        } else if (item.key === 'carMaintenanceDefault' && typeof item.value === 'number') {
-          result.carMaintenanceDefault = item.value;
-        } else if (item.key === 'categories' && Array.isArray(item.value) && item.value.length > 0) {
-          result.categories = item.value;
-        } else if (item.key === 'widgetSecretKey') {
+        if (item.key === 'normalSavingsDefault') {
+          result.normalSavingsDefault = cleanNum(item.value, DEFAULT_SETTINGS.normalSavingsDefault);
+        } else if (item.key === 'carMaintenanceDefault') {
+          result.carMaintenanceDefault = cleanNum(item.value, DEFAULT_SETTINGS.carMaintenanceDefault);
+        } else if (item.key === 'categories') {
+          result.categories = normalizeCategories(item.value);
+        } else if (item.key === 'widgetSecretKey' && typeof item.value === 'string') {
           result.widgetSecretKey = item.value;
         }
       }
     }
   } else if (typeof raw === 'object') {
-    if (typeof raw.normalSavingsDefault === 'number') {
-      result.normalSavingsDefault = raw.normalSavingsDefault;
+    if (raw.normalSavingsDefault !== undefined) {
+      result.normalSavingsDefault = cleanNum(raw.normalSavingsDefault, DEFAULT_SETTINGS.normalSavingsDefault);
     }
-    if (typeof raw.carMaintenanceDefault === 'number') {
-      result.carMaintenanceDefault = raw.carMaintenanceDefault;
+    if (raw.carMaintenanceDefault !== undefined) {
+      result.carMaintenanceDefault = cleanNum(raw.carMaintenanceDefault, DEFAULT_SETTINGS.carMaintenanceDefault);
     }
-    if (Array.isArray(raw.categories) && raw.categories.length > 0) {
-      result.categories = raw.categories;
+    if (raw.categories !== undefined) {
+      result.categories = normalizeCategories(raw.categories);
     }
-    if (raw.widgetSecretKey) {
+    if (typeof raw.widgetSecretKey === 'string' && raw.widgetSecretKey) {
       result.widgetSecretKey = raw.widgetSecretKey;
     }
   }
 
   if (!result.categories || result.categories.length === 0) {
-    result.categories = [...DEFAULT_SETTINGS.categories];
+    result.categories = [...DEFAULT_CATEGORIES];
   }
 
   return result;
@@ -77,7 +117,7 @@ export interface DatabaseState {
   lastUpdated: string;
 }
 
-// User's verified real data as initial seed
+// Verified real baseline data from user's kakeibo
 export const INITIAL_USER_DATA: DatabaseState = {
   incomes: [
     { id: "id_mtgwtmyy_zkjr1ym", date: "2025-10-01", month: "2025-10", amount: 11034, normalSavingsAmount: 0, carMaintenanceAmount: 0, freeAmount: 11034, memo: "" },
@@ -144,11 +184,168 @@ export const INITIAL_USER_DATA: DatabaseState = {
   settings: {
     normalSavingsDefault: 10000,
     carMaintenanceDefault: 10000,
-    categories: ['食費', '交通費', '車', 'DJ・音楽', 'PC・ゲーム', 'ファッション', '趣味', '日用品', '娯楽', 'その他'],
+    categories: [...DEFAULT_CATEGORIES],
     widgetSecretKey: 'kakeibo_widget_key_default',
   },
   lastUpdated: new Date().toISOString(),
 };
+
+function sanitizeIncomes(rawList: any[]): Income[] {
+  if (!Array.isArray(rawList)) return [];
+  const result: Income[] = [];
+  for (const item of rawList) {
+    if (!item || typeof item !== 'object') continue;
+    const date = typeof item.date === 'string' && item.date ? item.date : `${item.month || '2026-01'}-01`;
+    const month = typeof item.month === 'string' && item.month ? item.month : date.slice(0, 7);
+    const amount = cleanNum(item.amount);
+    const normalSavingsAmount = cleanNum(item.normalSavingsAmount);
+    const carMaintenanceAmount = cleanNum(item.carMaintenanceAmount);
+    const freeAmount = item.freeAmount !== undefined ? cleanNum(item.freeAmount) : (amount - normalSavingsAmount - carMaintenanceAmount);
+
+    result.push({
+      id: String(item.id || uid('inc')),
+      date,
+      month,
+      amount,
+      normalSavingsAmount,
+      carMaintenanceAmount,
+      freeAmount,
+      memo: String(item.memo || '').trim(),
+      createdAt: item.createdAt || new Date().toISOString(),
+    });
+  }
+  return result;
+}
+
+function sanitizeExpenses(rawList: any[]): Expense[] {
+  if (!Array.isArray(rawList)) return [];
+  const result: Expense[] = [];
+  for (const item of rawList) {
+    if (!item || typeof item !== 'object') continue;
+    const date = typeof item.date === 'string' && item.date ? item.date : new Date().toISOString().slice(0, 10);
+    const month = typeof item.month === 'string' && item.month ? item.month : date.slice(0, 7);
+    const amount = cleanNum(item.amount);
+    const category = typeof item.category === 'string' && item.category.trim() ? item.category.trim() : 'その他';
+    const name = typeof item.name === 'string' && item.name.trim() ? item.name.trim() : '支出';
+
+    const allocations: FundAllocation[] = [];
+    if (Array.isArray(item.allocations)) {
+      for (const a of item.allocations) {
+        if (!a || typeof a !== 'object') continue;
+        allocations.push({
+          fundId: String(a.fundId || uid('fnd')),
+          sourceMonth: String(a.sourceMonth || month),
+          type: (a.type === 'savings' || a.type === 'car' ? a.type : 'free') as FundType,
+          amount: cleanNum(a.amount),
+        });
+      }
+    }
+
+    result.push({
+      id: String(item.id || uid('exp')),
+      date,
+      month,
+      amount,
+      category,
+      name,
+      memo: String(item.memo || '').trim(),
+      allocations,
+      createdAt: item.createdAt || new Date().toISOString(),
+    });
+  }
+  return result;
+}
+
+function sanitizeFunds(rawList: any[]): Fund[] {
+  if (!Array.isArray(rawList)) return [];
+  const result: Fund[] = [];
+  for (const item of rawList) {
+    if (!item || typeof item !== 'object') continue;
+    const type: FundType = item.type === 'savings' || item.type === 'car' ? item.type : 'free';
+    const originalAmount = cleanNum(item.originalAmount);
+    const remainingAmount = item.remainingAmount !== undefined ? cleanNum(item.remainingAmount) : originalAmount;
+
+    result.push({
+      id: String(item.id || uid('fnd')),
+      type,
+      sourceMonth: String(item.sourceMonth || '2026-01'),
+      originalAmount,
+      remainingAmount,
+      incomeId: String(item.incomeId || ''),
+    });
+  }
+  return result;
+}
+
+/**
+ * Automatically regenerates funds if missing or corrupted by replaying incomes and expenses FIFO.
+ */
+export function reconstructFunds(incomes: Income[], expenses: Expense[]): Fund[] {
+  const funds: Fund[] = [];
+
+  // 1. Create fund pots from incomes
+  for (const inc of incomes) {
+    if (inc.normalSavingsAmount > 0) {
+      funds.push({
+        id: uid('fnd'),
+        type: 'savings',
+        sourceMonth: inc.month,
+        originalAmount: inc.normalSavingsAmount,
+        remainingAmount: inc.normalSavingsAmount,
+        incomeId: inc.id,
+      });
+    }
+    if (inc.carMaintenanceAmount > 0) {
+      funds.push({
+        id: uid('fnd'),
+        type: 'car',
+        sourceMonth: inc.month,
+        originalAmount: inc.carMaintenanceAmount,
+        remainingAmount: inc.carMaintenanceAmount,
+        incomeId: inc.id,
+      });
+    }
+    if (inc.freeAmount !== 0) {
+      funds.push({
+        id: uid('fnd'),
+        type: 'free',
+        sourceMonth: inc.month,
+        originalAmount: inc.freeAmount,
+        remainingAmount: inc.freeAmount,
+        incomeId: inc.id,
+      });
+    }
+  }
+
+  // 2. Replay existing allocations from expenses
+  for (const exp of expenses) {
+    if (Array.isArray(exp.allocations) && exp.allocations.length > 0) {
+      for (const alloc of exp.allocations) {
+        // Try match by fundId first, else match by type & sourceMonth
+        let fund = funds.find((f) => f.id === alloc.fundId);
+        if (!fund) {
+          fund = funds.find((f) => f.type === alloc.type && f.sourceMonth === alloc.sourceMonth && f.remainingAmount >= alloc.amount);
+        }
+        if (fund) {
+          fund.remainingAmount = Math.max(0, fund.remainingAmount - alloc.amount);
+          alloc.fundId = fund.id;
+        }
+      }
+    } else {
+      // Deduct from free FIFO
+      let remaining = exp.amount;
+      const freePool = funds.filter((f) => f.type === 'free' && f.remainingAmount > 0).sort((a, b) => (a.sourceMonth < b.sourceMonth ? -1 : 1));
+      for (const f of freePool) {
+        if (remaining <= 0) break;
+        const use = Math.min(f.remainingAmount, remaining);
+        f.remainingAmount -= use;
+        remaining -= use;
+      }
+    }
+  }
+
+  return funds;
+}
 
 export const ClientStore = {
   load(): DatabaseState {
@@ -157,20 +354,34 @@ export const ClientStore = {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed && Array.isArray(parsed.incomes) && Array.isArray(parsed.expenses) && Array.isArray(parsed.funds)) {
-          return {
-            incomes: parsed.incomes,
-            expenses: parsed.expenses,
-            funds: parsed.funds,
-            settings: normalizeSettings(parsed.settings),
+        if (parsed && typeof parsed === 'object') {
+          const incomes = sanitizeIncomes(parsed.incomes);
+          const expenses = sanitizeExpenses(parsed.expenses);
+          let funds = sanitizeFunds(parsed.funds);
+
+          // If funds are missing or zero while incomes exist, reconstruct them
+          if (funds.length === 0 && incomes.length > 0) {
+            funds = reconstructFunds(incomes, expenses);
+          }
+
+          const settings = normalizeSettings(parsed.settings, parsed.categories);
+
+          const state: DatabaseState = {
+            incomes,
+            expenses,
+            funds,
+            settings,
             lastUpdated: parsed.lastUpdated || new Date().toISOString(),
           };
+
+          return state;
         }
       }
     } catch (e) {
       console.warn('Failed to parse localStorage, resetting to initial user data', e);
     }
-    // Save initial user data
+
+    // Default seed
     this.save(INITIAL_USER_DATA);
     return INITIAL_USER_DATA;
   },
@@ -188,9 +399,12 @@ export const ClientStore = {
 
   getFundTotals(funds: Fund[]): FundTotals {
     const totals = { free: 0, savings: 0, car: 0, total: 0 };
+    if (!Array.isArray(funds)) return totals;
+
     for (const f of funds) {
-      if (f.type in totals) {
-        totals[f.type as 'free' | 'savings' | 'car'] += f.remainingAmount;
+      if (f && typeof f === 'object' && f.type in totals) {
+        const rem = cleanNum(f.remainingAmount);
+        totals[f.type as 'free' | 'savings' | 'car'] += rem;
       }
     }
     totals.total = totals.free + totals.savings + totals.car;
@@ -202,17 +416,19 @@ export const ClientStore = {
     const shortfall: Array<{ type: FundType; missing: number }> = [];
 
     for (const req of requests) {
-      if (!req.amount || req.amount <= 0) continue;
-      let remaining = req.amount;
+      const needed = cleanNum(req.amount);
+      if (needed <= 0) continue;
+      let remaining = needed;
 
       const pool = funds
-        .filter((f) => f.type === req.type && f.remainingAmount > 0)
-        .sort((a, b) => (a.sourceMonth < b.sourceMonth ? -1 : a.sourceMonth > b.sourceMonth ? 1 : 0));
+        .filter((f) => f && f.type === req.type && cleanNum(f.remainingAmount) > 0)
+        .sort((a, b) => (String(a.sourceMonth) < String(b.sourceMonth) ? -1 : 1));
 
       for (const fund of pool) {
         if (remaining <= 0) break;
-        const use = Math.min(fund.remainingAmount, remaining);
-        fund.remainingAmount -= use;
+        const curRem = cleanNum(fund.remainingAmount);
+        const use = Math.min(curRem, remaining);
+        fund.remainingAmount = curRem - use;
         remaining -= use;
         allocations.push({
           fundId: fund.id,
@@ -231,11 +447,12 @@ export const ClientStore = {
   },
 
   restoreAllocations(funds: Fund[], allocations: FundAllocation[]) {
-    if (!allocations || !allocations.length) return;
+    if (!Array.isArray(allocations) || !allocations.length) return;
     for (const alloc of allocations) {
-      const fund = funds.find((f) => f.id === alloc.fundId);
+      if (!alloc) continue;
+      const fund = funds.find((f) => f && f.id === alloc.fundId);
       if (fund) {
-        fund.remainingAmount += alloc.amount;
+        fund.remainingAmount = cleanNum(fund.remainingAmount) + cleanNum(alloc.amount);
       }
     }
   },
@@ -249,11 +466,14 @@ export const ClientStore = {
     memo?: string;
   }) {
     const db = this.load();
-    const numAmount = Number(data.amount);
-    const numSavings = Number(data.normalSavingsAmount) || 0;
-    const numCar = Number(data.carMaintenanceAmount) || 0;
+    const numAmount = cleanNum(data.amount);
+    const numSavings = cleanNum(data.normalSavingsAmount);
+    const numCar = cleanNum(data.carMaintenanceAmount);
     const numFree = numAmount - numSavings - numCar;
-    const monthStr = `${data.year}-${String(data.month).padStart(2, '0')}`;
+
+    const safeYear = cleanNum(data.year, new Date().getFullYear());
+    const safeMonth = Math.min(12, Math.max(1, cleanNum(data.month, new Date().getMonth() + 1)));
+    const monthStr = `${safeYear}-${String(safeMonth).padStart(2, '0')}`;
 
     const income: Income = {
       id: uid('inc'),
@@ -309,10 +529,10 @@ export const ClientStore = {
   deleteIncome(id: string) {
     const db = this.load();
     const relatedFunds = db.funds.filter((f) => f.incomeId === id);
-    const consumed = relatedFunds.some((f) => f.remainingAmount !== f.originalAmount);
+    const consumed = relatedFunds.some((f) => cleanNum(f.remainingAmount) !== cleanNum(f.originalAmount));
 
     if (consumed) {
-      throw new Error('この収入から生まれた資金は既に一部使用されているため削除できません。支出を先に削除してください。');
+      throw new Error('この収入から生まれた資金は既に一部使用されているため削除できません。関連する支出を先に削除してください。');
     }
 
     db.funds = db.funds.filter((f) => f.incomeId !== id);
@@ -330,14 +550,18 @@ export const ClientStore = {
     requestedByType?: Array<{ type: FundType; amount: number }>;
   }) {
     const db = this.load();
-    const numAmount = Number(data.amount);
-    const monthStr = data.date.slice(0, 7);
+    const numAmount = cleanNum(data.amount);
+    const dateStr = typeof data.date === 'string' && data.date ? data.date : new Date().toISOString().slice(0, 10);
+    const monthStr = dateStr.slice(0, 7);
     const safeName = (data.name !== undefined && String(data.name).trim() !== '') ? String(data.name).trim() : '支出';
     const safeCategory = (data.category !== undefined && String(data.category).trim() !== '') ? String(data.category).trim() : 'その他';
 
     let requests: Array<{ type: FundType; amount: number }> = [];
     if (Array.isArray(data.requestedByType) && data.requestedByType.length > 0) {
-      requests = data.requestedByType;
+      requests = data.requestedByType.map((r) => ({
+        type: r.type,
+        amount: cleanNum(r.amount),
+      }));
     } else {
       requests = [{ type: 'free', amount: numAmount }];
     }
@@ -346,7 +570,7 @@ export const ClientStore = {
 
     const expense: Expense = {
       id: uid('exp'),
-      date: data.date,
+      date: dateStr,
       month: monthStr,
       amount: numAmount,
       category: safeCategory,
@@ -379,28 +603,53 @@ export const ClientStore = {
 
   updateSettings(settings: Partial<Settings>) {
     const db = this.load();
-    if (settings.normalSavingsDefault !== undefined) db.settings.normalSavingsDefault = Number(settings.normalSavingsDefault);
-    if (settings.carMaintenanceDefault !== undefined) db.settings.carMaintenanceDefault = Number(settings.carMaintenanceDefault);
-    if (Array.isArray(settings.categories)) db.settings.categories = settings.categories;
-    if (settings.widgetSecretKey !== undefined) db.settings.widgetSecretKey = settings.widgetSecretKey;
+    if (settings.normalSavingsDefault !== undefined) db.settings.normalSavingsDefault = cleanNum(settings.normalSavingsDefault);
+    if (settings.carMaintenanceDefault !== undefined) db.settings.carMaintenanceDefault = cleanNum(settings.carMaintenanceDefault);
+    if (settings.categories !== undefined) db.settings.categories = normalizeCategories(settings.categories);
+    if (settings.widgetSecretKey !== undefined) db.settings.widgetSecretKey = String(settings.widgetSecretKey);
     db.settings = normalizeSettings(db.settings);
     this.save(db);
     return { settings: db.settings };
   },
 
-  importData(data: any) {
+  importData(rawInput: any) {
+    let data = rawInput;
     if (typeof data === 'string') {
-      data = JSON.parse(data);
-    }
-    if (!data || !Array.isArray(data.incomes) || !Array.isArray(data.expenses) || !Array.isArray(data.funds)) {
-      throw new Error('バックアップデータの形式が正しくありません。(incomes, expenses, funds配列が必要です)');
+      const cleanStr = data.trim().replace(/^\uFEFF/, '');
+      data = JSON.parse(cleanStr);
     }
 
+    if (!data || typeof data !== 'object') {
+      throw new Error('データ形式が無効です (JSONオブジェクトが必要です)');
+    }
+
+    // Support nested exports: data.kakeibo or data.data
+    if (data.kakeibo && typeof data.kakeibo === 'object') {
+      data = data.kakeibo;
+    } else if (data.data && typeof data.data === 'object' && Array.isArray(data.data.incomes)) {
+      data = data.data;
+    }
+
+    const incomes = sanitizeIncomes(data.incomes || []);
+    const expenses = sanitizeExpenses(data.expenses || []);
+    let funds = sanitizeFunds(data.funds || []);
+
+    if (incomes.length === 0 && expenses.length === 0) {
+      throw new Error('有効な収入または支出データが見つかりませんでした');
+    }
+
+    // Auto-reconstruct funds if funds array is empty or missing
+    if (funds.length === 0 && incomes.length > 0) {
+      funds = reconstructFunds(incomes, expenses);
+    }
+
+    const settings = normalizeSettings(data.settings, data.categories);
+
     const newState: DatabaseState = {
-      incomes: data.incomes,
-      expenses: data.expenses,
-      funds: data.funds,
-      settings: normalizeSettings(data.settings),
+      incomes,
+      expenses,
+      funds,
+      settings,
       lastUpdated: new Date().toISOString(),
     };
 

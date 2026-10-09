@@ -147,12 +147,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     reader.onload = async (event) => {
       try {
         const text = event.target?.result as string;
-        const json = JSON.parse(text);
-        await Api.importData(json);
+        await Api.importData(text);
         onToast('データを正常に復元しました！');
         onRefresh();
       } catch (err: any) {
         onToast('JSON読み込み失敗: ' + (err.message || 'フォーマットが無効です'), true);
+      } finally {
+        e.target.value = '';
       }
     };
     reader.readAsText(file);
@@ -165,8 +166,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
     setIsImporting(true);
     try {
-      const json = JSON.parse(pasteJsonText);
-      await Api.importData(json);
+      await Api.importData(pasteJsonText);
       onToast('データを正常に復元しました！');
       setShowPasteModal(false);
       setPasteJsonText('');
