@@ -7,6 +7,7 @@ import type {
   FundTotals,
   WidgetPayload,
 } from '../types.ts';
+import { ClientStore, normalizeSettings } from '../db/clientStore.ts';
 
 export interface SummaryResponse {
   currentMonth: string;
@@ -97,113 +98,208 @@ export function fundTypeColor(type: FundType | string): {
   }
 }
 
+function buildLocalSummary(): SummaryResponse {
+  const db = ClientStore.load();
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const fundTotals = ClientStore.getFundTotals(db.funds);
+
+  const allMonthsSet = new Set<string>();
+  db.incomes.forEach((i) => allMonthsSet.add(i.month));
+  db.expenses.forEach((e) => allMonthsSet.add(e.month));
+  if (!allMonthsSet.has(currentMonth)) allMonthsSet.add(currentMonth);
+  const allMonths = Array.from(allMonthsSet).sort();
+
+  return {
+    currentMonth,
+    fundTotals,
+    incomes: db.incomes,
+    expenses: db.expenses,
+    funds: db.funds,
+    settings: normalizeSettings(db.settings),
+    allMonths,
+    lastUpdated: db.lastUpdated,
+  };
+}
+
 export const Api = {
   async getSummary(): Promise<SummaryResponse> {
-    const res = await fetch('/api/summary');
-    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-    return res.json();
+    // 1. Always have local state ready immediately
+    const local = buildLocalSummary();
+
+    // 2. Try fetching from server in background/online mode
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      const res = await fetch('/api/summary', { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data.incomes) && Array.isArray(data.expenses) && Array.isArray(data.funds)) {
+          // Sync server data to local
+          ClientStore.save({
+            incomes: data.incomes,
+            expenses: data.expenses,
+            funds: data.funds,
+            settings: normalizeSettings(data.settings),
+            lastUpdated: data.lastUpdated || new Date().toISOString(),
+          });
+          return buildLocalSummary();
+        }
+      }
+    } catch {
+      // Offline or static Vercel deployment: seamlessly use local data!
+    }
+
+    return local;
   },
 
   async getWidgetData(): Promise<WidgetPayload> {
-    const res = await fetch('/api/widget');
-    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-    return res.json();
+    try {
+      const res = await fetch('/api/widget');
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch {
+      // Local fallback calculation
+    }
+
+    const summary = buildLocalSummary();
+    const now = new Date();
+    const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const daysLeftInMonth = Math.max(1, lastDayOfMonth - now.getDate() + 1);
+    const dailyBudget = Math.max(0, Math.floor(summary.fundTotals.free / daysLeftInMonth));
+
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+
+    return {
+      status: 'ok',
+      title: '家計簿 残高ウィジェット',
+      freeBalance: summary.fundTotals.free,
+      formattedFreeBalance: formatYen(summary.fundTotals.free),
+      savingsBalance: summary.fundTotals.savings,
+      formattedSavingsBalance: formatYen(summary.fundTotals.savings),
+      carBalance: summary.fundTotals.car,
+      formattedCarBalance: formatYen(summary.fundTotals.car),
+      totalAssets: summary.fundTotals.total,
+      formattedTotalAssets: formatYen(summary.fundTotals.total),
+      thisMonthIncome: summary.incomes.filter((i) => i.month === summary.currentMonth).reduce((s, i) => s + i.amount, 0),
+      thisMonthExpense: summary.expenses.filter((e) => e.month === summary.currentMonth).reduce((s, e) => s + e.amount, 0),
+      currentMonth: summary.currentMonth,
+      monthLabel: monthLabel(summary.currentMonth),
+      daysLeftInMonth,
+      dailyBudget,
+      formattedDailyBudget: formatYen(dailyBudget),
+      healthStatus: summary.fundTotals.free < 10000 ? 'critical' : summary.fundTotals.free < 30000 ? 'warning' : 'healthy',
+      healthLabel: summary.fundTotals.free < 10000 ? '要節約' : summary.fundTotals.free < 30000 ? '注意' : '順調',
+      recentExpenses: [...summary.expenses].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 5).map((e) => ({
+        id: e.id,
+        name: e.name,
+        amount: e.amount,
+        formattedAmount: formatYen(e.amount),
+        category: e.category,
+        date: e.date,
+      })),
+      updatedAt: new Date().toISOString(),
+      appUrl: origin,
+    };
   },
 
   async addIncome(data: {
     year: number;
     month: number;
     amount: number;
-    normalSavingsAmount: number;
-    carMaintenanceAmount: number;
+    normalSavingsAmount?: number;
+    carMaintenanceAmount?: number;
     memo?: string;
   }): Promise<{ income: Income; fundTotals: FundTotals }> {
-    const res = await fetch('/api/incomes', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || '収入の登録に失敗しました');
-    }
-    return res.json();
+    // 1. Update client local storage immediately (always succeeds!)
+    const localResult = ClientStore.addIncome(data);
+
+    // 2. Sync to server in background if available
+    try {
+      fetch('/api/incomes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }).catch(() => {});
+    } catch {}
+
+    return localResult;
   },
 
   async deleteIncome(id: string): Promise<void> {
-    const res = await fetch(`/api/incomes/${id}`, {
-      method: 'DELETE',
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || '収入の削除に失敗しました');
-    }
+    ClientStore.deleteIncome(id);
+    try {
+      fetch(`/api/incomes/${id}`, { method: 'DELETE' }).catch(() => {});
+    } catch {}
   },
 
   async addExpense(data: {
     date: string;
     amount: number;
-    category: string;
-    name: string;
+    category?: string;
+    name?: string;
     memo?: string;
     requestedByType?: Array<{ type: FundType; amount: number }>;
   }): Promise<{ expense: Expense; shortfall: Array<{ type: FundType; missing: number }>; fundTotals: FundTotals }> {
-    const res = await fetch('/api/expenses', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || '支出の登録に失敗しました');
-    }
-    return res.json();
+    // 1. Update client local storage immediately (always succeeds!)
+    const localResult = ClientStore.addExpense(data);
+
+    // 2. Sync to server in background if available
+    try {
+      fetch('/api/expenses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }).catch(() => {});
+    } catch {}
+
+    return localResult;
   },
 
   async deleteExpense(id: string): Promise<void> {
-    const res = await fetch(`/api/expenses/${id}`, {
-      method: 'DELETE',
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || '支出の削除に失敗しました');
-    }
+    ClientStore.deleteExpense(id);
+    try {
+      fetch(`/api/expenses/${id}`, { method: 'DELETE' }).catch(() => {});
+    } catch {}
   },
 
   async updateSettings(settings: Partial<Settings>): Promise<{ settings: Settings }> {
-    const res = await fetch('/api/settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(settings),
-    });
-    if (!res.ok) throw new Error('設定の更新に失敗しました');
-    return res.json();
+    const localResult = ClientStore.updateSettings(settings);
+    try {
+      fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings),
+      }).catch(() => {});
+    } catch {}
+    return localResult;
   },
 
   async resetData(): Promise<void> {
-    const res = await fetch('/api/reset', { method: 'POST' });
-    if (!res.ok) throw new Error('リセットに失敗しました');
-  },
-
-  async clearData(): Promise<void> {
-    const res = await fetch('/api/clear', { method: 'POST' });
-    if (!res.ok) throw new Error('データの全消去に失敗しました');
+    ClientStore.resetData();
+    try {
+      fetch('/api/reset', { method: 'POST' }).catch(() => {});
+    } catch {}
   },
 
   async exportData(): Promise<any> {
-    const res = await fetch('/api/export');
-    return res.json();
+    return ClientStore.exportData();
   },
 
   async importData(data: any): Promise<void> {
-    const res = await fetch('/api/import', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || 'インポートに失敗しました');
-    }
+    // 1. Import locally immediately (auto-normalizes format!)
+    ClientStore.importData(data);
+
+    // 2. Sync to server in background if available
+    try {
+      fetch('/api/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }).catch(() => {});
+    } catch {}
   },
 };
